@@ -1,3 +1,3 @@
-package duola_sdk
+package duolasdk
 
 //支付

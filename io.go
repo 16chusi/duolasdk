@@ -1,3 +1,3 @@
-package duola_sdk
+package duolasdk
 
 // IO能力支持。
