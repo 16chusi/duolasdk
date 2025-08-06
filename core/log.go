@@ -1,12 +1,13 @@
-package duolasdk
+package core
 
 //日志能力
 import (
 	"fmt"
-	"github.com/labstack/gommon/log"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/labstack/gommon/log"
 )
 
 type AppLog struct {

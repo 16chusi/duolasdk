@@ -1,4 +1,4 @@
-package duolasdk
+package core
 
 //网络能力支持
 import (

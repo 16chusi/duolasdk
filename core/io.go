@@ -1,3 +1,3 @@
-package duolasdk
+package core
 
 // IO能力支持。

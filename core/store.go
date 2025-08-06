@@ -1,15 +1,16 @@
-package duolasdk
+package core
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 // ErrKeyNotFound 当在存储中找不到键时返回
@@ -88,6 +89,51 @@ type baseStore struct {
 	onKeyExpired func(key, value string)
 }
 
+// getDefaultInitQueries 获取默认的初始化查询
+func (b *baseStore) getDefaultInitQueries() []string {
+	return []string{
+		`CREATE TABLE IF NOT EXISTS kv_store (
+			key TEXT PRIMARY KEY,
+			value TEXT,
+			expire_at INTEGER
+		)`,
+		`CREATE TABLE IF NOT EXISTS hash_store (
+			key TEXT NOT NULL,
+			field TEXT NOT NULL,
+			value TEXT,
+			PRIMARY KEY (key, field)
+		)`,
+		`CREATE TABLE IF NOT EXISTS list_store (
+			key TEXT NOT NULL,
+			"index" INTEGER NOT NULL,
+			value TEXT,
+			PRIMARY KEY (key, "index")
+		)`,
+		`CREATE TABLE IF NOT EXISTS set_store (
+			key TEXT NOT NULL,
+			member TEXT NOT NULL,
+			PRIMARY KEY (key, member)
+		)`,
+	}
+}
+
+// initializeTables 初始化表结构
+func (b *baseStore) initializeTables(initQueries []string) error {
+	for _, query := range initQueries {
+		if b.logger != nil {
+			b.logger.Debugf("Store: executing init query: %s", query)
+		}
+		_, err := b.db.Exec(query)
+		if err != nil {
+			if b.logger != nil {
+				b.logger.Errorf("Store: failed to execute init query '%s': %v", query, err)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 // LocalStore 本地存储
 type LocalStore struct {
 	*baseStore
@@ -156,43 +202,14 @@ func NewLocalStore(opts ...StoreOption) (*LocalStore, error) {
 	}
 
 	// 创建默认的 KV 表
-	initQueries := []string{
-		`CREATE TABLE IF NOT EXISTS kv_store (
-			key TEXT PRIMARY KEY,
-			value TEXT,
-			expire_at INTEGER
-		)`,
-		`CREATE TABLE IF NOT EXISTS hash_store (
-			key TEXT NOT NULL,
-			field TEXT NOT NULL,
-			value TEXT,
-			PRIMARY KEY (key, field)
-		)`,
-		`CREATE TABLE IF NOT EXISTS list_store (
-			key TEXT NOT NULL,
-			index INTEGER NOT NULL,
-			value TEXT,
-			PRIMARY KEY (key, index)
-		)`,
-		`CREATE TABLE IF NOT EXISTS set_store (
-			key TEXT NOT NULL,
-			member TEXT NOT NULL,
-			PRIMARY KEY (key, member)
-		)`,
-	}
-
-	for _, query := range initQueries {
+	base := &baseStore{db: db, logger: option.Logger, onKeyExpired: option.OnKeyExpired}
+	err = base.initializeTables(base.getDefaultInitQueries())
+	if err != nil {
 		if option.Logger != nil {
-			option.Logger.Debugf("LocalStore: executing init query: %s", query)
+			option.Logger.Errorf("LocalStore: failed to initialize tables: %v", err)
 		}
-		_, err = db.Exec(query)
-		if err != nil {
-			if option.Logger != nil {
-				option.Logger.Errorf("LocalStore: failed to execute init query '%s': %v", query, err)
-			}
-			db.Close()
-			return nil, err
-		}
+		db.Close()
+		return nil, err
 	}
 
 	// 执行用户自定义的初始化SQL语句
@@ -261,43 +278,14 @@ func NewMemStore(opts ...StoreOption) (*MemStore, error) {
 	}
 
 	// 创建默认的 KV 表
-	initQueries := []string{
-		`CREATE TABLE IF NOT EXISTS kv_store (
-			key TEXT PRIMARY KEY,
-			value TEXT,
-			expire_at INTEGER
-		)`,
-		`CREATE TABLE IF NOT EXISTS hash_store (
-			key TEXT NOT NULL,
-			field TEXT NOT NULL,
-			value TEXT,
-			PRIMARY KEY (key, field)
-		)`,
-		`CREATE TABLE IF NOT EXISTS list_store (
-			key TEXT NOT NULL,
-			index INTEGER NOT NULL,
-			value TEXT,
-			PRIMARY KEY (key, index)
-		)`,
-		`CREATE TABLE IF NOT EXISTS set_store (
-			key TEXT NOT NULL,
-			member TEXT NOT NULL,
-			PRIMARY KEY (key, member)
-		)`,
-	}
-
-	for _, query := range initQueries {
+	base := &baseStore{db: db, logger: option.Logger, onKeyExpired: option.OnKeyExpired}
+	err = base.initializeTables(base.getDefaultInitQueries())
+	if err != nil {
 		if option.Logger != nil {
-			option.Logger.Debugf("MemStore: executing init query: %s", query)
+			option.Logger.Errorf("MemStore: failed to initialize tables: %v", err)
 		}
-		_, err = db.Exec(query)
-		if err != nil {
-			if option.Logger != nil {
-				option.Logger.Errorf("MemStore: failed to execute init query '%s': %v", query, err)
-			}
-			db.Close()
-			return nil, err
-		}
+		db.Close()
+		return nil, err
 	}
 
 	// 执行用户自定义的初始化SQL语句
@@ -950,7 +938,7 @@ func (b *baseStore) LPush(key string, values ...string) error {
 
 	// 更新现有元素的索引
 	_, err = tx.Exec(`
-		UPDATE list_store SET index = index + ? WHERE key = ?
+		UPDATE list_store SET "index" = "index" + ? WHERE key = ?
 	`, len(values), key)
 	if err != nil {
 		if b.logger != nil {
@@ -961,7 +949,7 @@ func (b *baseStore) LPush(key string, values ...string) error {
 
 	// 插入新元素
 	stmt, err := tx.Prepare(`
-		INSERT INTO list_store (key, index, value) VALUES (?, ?, ?)
+		INSERT INTO list_store (key, "index", value) VALUES (?, ?, ?)
 	`)
 	if err != nil {
 		if b.logger != nil {
@@ -1018,7 +1006,7 @@ func (b *baseStore) RPush(key string, values ...string) error {
 	// 获取当前列表长度
 	var length int
 	err = tx.QueryRow(`
-		SELECT COALESCE(MAX(index), -1) + 1 FROM list_store WHERE key = ?
+		SELECT COALESCE(MAX("index"), -1) + 1 FROM list_store WHERE key = ?
 	`, key).Scan(&length)
 	if err != nil {
 		if b.logger != nil {
@@ -1029,7 +1017,7 @@ func (b *baseStore) RPush(key string, values ...string) error {
 
 	// 插入新元素
 	stmt, err := tx.Prepare(`
-		INSERT INTO list_store (key, index, value) VALUES (?, ?, ?)
+		INSERT INTO list_store (key, "index", value) VALUES (?, ?, ?)
 	`)
 	if err != nil {
 		if b.logger != nil {
@@ -1081,7 +1069,7 @@ func (b *baseStore) LPop(key string) (string, error) {
 
 	var value string
 	err = tx.QueryRow(`
-		SELECT value FROM list_store WHERE key = ? ORDER BY index LIMIT 1
+		SELECT value FROM list_store WHERE key = ? ORDER BY "index" LIMIT 1
 	`, key).Scan(&value)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1098,8 +1086,8 @@ func (b *baseStore) LPop(key string) (string, error) {
 
 	// 删除头元素
 	_, err = tx.Exec(`
-		DELETE FROM list_store WHERE key = ? AND index = (
-			SELECT index FROM list_store WHERE key = ? ORDER BY index LIMIT 1
+		DELETE FROM list_store WHERE key = ? AND "index" = (
+			SELECT "index" FROM list_store WHERE key = ? ORDER BY "index" LIMIT 1
 		)
 	`, key, key)
 	if err != nil {
@@ -1111,7 +1099,7 @@ func (b *baseStore) LPop(key string) (string, error) {
 
 	// 更新索引
 	_, err = tx.Exec(`
-		UPDATE list_store SET index = index - 1 WHERE key = ?
+		UPDATE list_store SET "index" = "index" - 1 WHERE key = ?
 	`, key)
 	if err != nil {
 		if b.logger != nil {
@@ -1152,7 +1140,7 @@ func (b *baseStore) RPop(key string) (string, error) {
 
 	var value string
 	err = tx.QueryRow(`
-		SELECT value FROM list_store WHERE key = ? ORDER BY index DESC LIMIT 1
+		SELECT value FROM list_store WHERE key = ? ORDER BY "index" DESC LIMIT 1
 	`, key).Scan(&value)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1169,8 +1157,8 @@ func (b *baseStore) RPop(key string) (string, error) {
 
 	// 删除尾元素
 	_, err = tx.Exec(`
-		DELETE FROM list_store WHERE key = ? AND index = (
-			SELECT index FROM list_store WHERE key = ? ORDER BY index DESC LIMIT 1
+		DELETE FROM list_store WHERE key = ? AND "index" = (
+			SELECT "index" FROM list_store WHERE key = ? ORDER BY "index" DESC LIMIT 1
 		)
 	`, key, key)
 	if err != nil {
@@ -1204,7 +1192,7 @@ func (b *baseStore) LRange(key string, start, stop int) ([]string, error) {
 	// 处理负数索引
 	var count int
 	err := b.db.QueryRow(`
-		SELECT COALESCE(MAX(index), -1) + 1 FROM list_store WHERE key = ?
+		SELECT COALESCE(MAX("index"), -1) + 1 FROM list_store WHERE key = ?
 	`, key).Scan(&count)
 	if err != nil {
 		if b.logger != nil {
@@ -1231,7 +1219,7 @@ func (b *baseStore) LRange(key string, start, stop int) ([]string, error) {
 	}
 
 	rows, err := b.db.Query(`
-		SELECT value FROM list_store WHERE key = ? AND index BETWEEN ? AND ? ORDER BY index
+		SELECT value FROM list_store WHERE key = ? AND "index" BETWEEN ? AND ? ORDER BY "index"
 	`, key, start, stop)
 	if err != nil {
 		if b.logger != nil {
@@ -1268,7 +1256,7 @@ func (b *baseStore) LLen(key string) (int, error) {
 
 	var count int
 	err := b.db.QueryRow(`
-		SELECT COALESCE(MAX(index), -1) + 1 FROM list_store WHERE key = ?
+		SELECT COALESCE(MAX("index"), -1) + 1 FROM list_store WHERE key = ?
 	`, key).Scan(&count)
 	if err != nil {
 		if b.logger != nil {

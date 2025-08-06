@@ -1,3 +1,3 @@
-package duolasdk
+package core
 
 //AI能力支持
