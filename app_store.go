@@ -47,163 +47,200 @@ func (s *AppStore) getStore(persistent ...bool) core.IStore {
 	return s.mem
 }
 
-// KeyValue operations
+// Set stores the key-value pair.
 func (s *AppStore) Set(key, value string, persistent ...bool) error {
 	return s.getStore(persistent...).Set(key, value)
 }
 
+// Get retrieves the value for a key.
 func (s *AppStore) Get(key string, persistent ...bool) (string, error) {
 	return s.getStore(persistent...).Get(key)
 }
 
+// Delete removes a key.
 func (s *AppStore) Delete(key string, persistent ...bool) error {
 	return s.getStore(persistent...).Delete(key)
 }
 
+// List lists all key-value pairs.
 func (s *AppStore) List(persistent ...bool) (map[string]string, error) {
 	return s.getStore(persistent...).List()
 }
 
-// Expiration operations
+// Expire sets an expiration for a key.
 func (s *AppStore) Expire(key string, milliseconds int64, persistent ...bool) error {
 	return s.getStore(persistent...).Expire(key, milliseconds)
 }
 
+// TTL gets the time-to-live for a key.
 func (s *AppStore) TTL(key string, persistent ...bool) (int64, error) {
 	return s.getStore(persistent...).TTL(key)
 }
 
-// Hash operations (like redis)
+// HSet sets the value of a field in a hash.
 func (s *AppStore) HSet(key, field, value string, persistent ...bool) error {
 	return s.getStore(persistent...).HSet(key, field, value)
 }
 
+// HGet gets the value of a field in a hash.
 func (s *AppStore) HGet(key, field string, persistent ...bool) (string, error) {
 	return s.getStore(persistent...).HGet(key, field)
 }
 
+// HGetAll gets all fields and values in a hash.
 func (s *AppStore) HGetAll(key string, persistent ...bool) (map[string]string, error) {
 	return s.getStore(persistent...).HGetAll(key)
 }
 
+// HMGet gets the values of multiple fields in a hash.
 func (s *AppStore) HMGet(key string, fields ...string) ([]string, error) {
 	return s.local.HMGet(key, fields...)
 }
+
+// HMGetMem gets the values of multiple fields in a hash from memory.
 func (s *AppStore) HMGetMem(key string, fields ...string) ([]string, error) {
 	return s.mem.HMGet(key, fields...)
 }
 
+// HMSet sets the values of multiple fields in a hash.
 func (s *AppStore) HMSet(key string, fieldValue map[string]string, persistent ...bool) error {
 	return s.getStore(persistent...).HMSet(key, fieldValue)
 }
 
+// HDel deletes one or more fields from a hash.
 func (s *AppStore) HDel(key string, fields ...string) error {
 	return s.local.HDel(key, fields...)
 }
 
+// HDelMem deletes one or more fields from a hash in memory.
 func (s *AppStore) HDelMem(key string, fields ...string) error {
 
 	return s.mem.HDel(key, fields...)
 }
 
+// HExists checks if a field exists in a hash.
 func (s *AppStore) HExists(key, field string, persistent ...bool) (bool, error) {
 	// 修正返回值类型
 	return s.getStore(persistent...).HExists(key, field)
 }
 
+// HKeys gets all the fields in a hash.
 func (s *AppStore) HKeys(key string, persistent ...bool) ([]string, error) {
 	return s.getStore(persistent...).HKeys(key)
 }
 
+// HLen gets the number of fields in a hash.
 func (s *AppStore) HLen(key string, persistent ...bool) (int, error) {
 	return s.getStore(persistent...).HLen(key)
 }
 
-// List operations (like redis)
+// LPush prepends one or multiple values to a list.
 func (s *AppStore) LPush(key string, values ...string) error {
 	return s.local.LPush(key, values...)
 }
 
+// LPushMem prepends one or multiple values to a list in memory.
 func (s *AppStore) LPushMem(key string, values ...string) error {
 	return s.mem.LPush(key, values...)
 }
 
+// RPush appends one or multiple values to a list.
 func (s *AppStore) RPush(key string, values ...string) error {
 	return s.local.RPush(key, values...)
 }
 
+// RPushMem appends one or multiple values to a list in memory.
 func (s *AppStore) RPushMem(key string, values ...string) error {
 	return s.mem.RPush(key, values...)
 }
 
+// LPop removes and returns the first element of a list.
 func (s *AppStore) LPop(key string, persistent ...bool) (string, error) {
 	return s.getStore(persistent...).LPop(key)
 }
 
+// RPop removes and returns the last element of a list.
 func (s *AppStore) RPop(key string, persistent ...bool) (string, error) {
 	return s.getStore(persistent...).RPop(key)
 }
 
+// LRange returns a range of elements from a list.
 func (s *AppStore) LRange(key string, start, stop int, persistent ...bool) ([]string, error) {
 	return s.getStore(persistent...).LRange(key, start, stop)
 }
 
+// LLen gets the length of a list.
 func (s *AppStore) LLen(key string, persistent ...bool) (int, error) {
 	return s.getStore(persistent...).LLen(key)
 }
 
-// Set operations (like redis)
+// SAdd adds one or more members to a set.
 func (s *AppStore) SAdd(key string, members ...string) error {
 	return s.local.SAdd(key, members...)
 }
 
+// SAddMem adds one or more members to a set in memory.
 func (s *AppStore) SAddMem(key string, members ...string) error {
 	return s.mem.SAdd(key, members...)
 }
 
+// SRem removes one or more members from a set.
 func (s *AppStore) SRem(key string, members ...string) error {
 	return s.local.SRem(key, members...)
 }
+
+// SRemMem removes one or more members from a set in memory.
 func (s *AppStore) SRemMem(key string, members ...string) error {
 	return s.mem.SRem(key, members...)
 }
 
+// SMembers returns all the members of a set.
 func (s *AppStore) SMembers(key string, persistent ...bool) ([]string, error) {
 	return s.getStore(persistent...).SMembers(key)
 }
 
+// SIsMember checks if a member is in a set.
 func (s *AppStore) SIsMember(key, member string, persistent ...bool) (bool, error) {
 	return s.getStore(persistent...).SIsMember(key, member)
 }
 
+// SCard gets the number of members in a set.
 func (s *AppStore) SCard(key string, persistent ...bool) (int, error) {
 	return s.getStore(persistent...).SCard(key)
 }
 
-// SQL operations
+// Exec executes a query without returning any rows.
 func (s *AppStore) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return s.local.Exec(query, args...)
 }
+
+// ExecMem executes a query without returning any rows in memory.
 func (s *AppStore) ExecMem(query string, args ...interface{}) (sql.Result, error) {
 	return s.mem.Exec(query, args...)
 }
 
+// Query executes a query that returns rows.
 func (s *AppStore) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return s.local.Query(query, args...)
 }
+
+// QueryMem executes a query that returns rows in memory.
 func (s *AppStore) QueryMem(query string, args ...interface{}) (*sql.Rows, error) {
 	return s.mem.Query(query, args...)
 }
 
+// QueryRow executes a query that is expected to return at most one row.
 func (s *AppStore) QueryRow(query string, args ...interface{}) *sql.Row {
 	// SQL操作默认使用持久化存储
 	return s.local.QueryRow(query, args...)
 }
+
+// QueryRowMem executes a query that is expected to return at most one row in memory.
 func (s *AppStore) QueryRowMem(query string, args ...interface{}) *sql.Row {
 	return s.mem.QueryRow(query, args...)
 }
 
-// Close 关闭存储连接
+// Close closes the storage connection.
 func (s *AppStore) Close() error {
 	// 关闭所有存储连接
 	localErr := s.local.Close()

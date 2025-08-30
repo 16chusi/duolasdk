@@ -29,7 +29,9 @@ func NewLogger(o *LoggerOption) *AppLog {
 
 	if o.Type == "file" {
 		dir := path.Dir(o.FileName)
-		os.MkdirAll(dir, os.ModePerm)
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			log.Fatal("创建日志目录失败:", err)
+		}
 		out, err := os.OpenFile(o.FileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 
 		if err != nil {
@@ -93,6 +95,9 @@ func (w *WailsLog) Fatal(message string) {
 	w.log.Fatal(message)
 }
 
-func NewWailsLog(log *AppLog) *WailsLog {
-	return &WailsLog{log}
+// NewWailsLog 创建一个新的 WailsLog 实例
+func NewWailsLog(appLog *AppLog) *WailsLog {
+	return &WailsLog{
+		log: appLog,
+	}
 }
