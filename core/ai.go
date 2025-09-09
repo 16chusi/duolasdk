@@ -100,6 +100,13 @@ func (o *OllamaProvider) Chat(model string, messages []Message) (string, error) 
 	return chatResponse.Message.Content, nil
 }
 
+// ChatStreamResponse 流式聊天响应结构
+type ChatStreamResponse struct {
+	Model   string  `json:"model"`
+	Message Message `json:"message"`
+	Done    bool    `json:"done"`
+}
+
 // ChatStream 发送聊天消息并流式返回结果
 func (o *OllamaProvider) ChatStream(model string, messages []Message, callback func(string)) error {
 	requestBody := ChatRequest{
@@ -146,15 +153,20 @@ func (o *OllamaProvider) ChatStream(model string, messages []Message, callback f
 			continue
 		}
 
-		var chatResponse ChatResponse
+		var chatResponse ChatStreamResponse
 		err = json.Unmarshal([]byte(line), &chatResponse)
 		if err != nil {
-			// 忽略解析错误，继续处理下一行
+			// 忽略解析错误，继续处理下一行。Ollama有时会发送非JSON的keep-alive信息。
 			continue
 		}
 
 		if chatResponse.Message.Content != "" {
 			callback(chatResponse.Message.Content)
+		}
+
+		// 如果Ollama标记流结束，则主动退出
+		if chatResponse.Done {
+			break
 		}
 	}
 
