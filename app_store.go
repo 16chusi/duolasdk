@@ -34,8 +34,8 @@ func NewStore(opts ...core.StoreOption) *AppStore {
 	}
 }
 
-// getStore 根据 persistent 参数选择存储实例
-func (s *AppStore) getStore(persistent ...bool) core.IStore {
+// GetStore 根据 persistent 参数选择存储实例
+func (s *AppStore) GetStore(persistent ...bool) core.IStore {
 	isPersistent := true
 	if len(persistent) > 0 {
 		isPersistent = persistent[0]
@@ -49,47 +49,47 @@ func (s *AppStore) getStore(persistent ...bool) core.IStore {
 
 // Set stores the key-value pair.
 func (s *AppStore) Set(key, value string, persistent ...bool) error {
-	return s.getStore(persistent...).Set(key, value)
+	return s.GetStore(persistent...).Set(key, value)
 }
 
 // Get retrieves the value for a key.
 func (s *AppStore) Get(key string, persistent ...bool) (string, error) {
-	return s.getStore(persistent...).Get(key)
+	return s.GetStore(persistent...).Get(key)
 }
 
 // Delete removes a key.
 func (s *AppStore) Delete(key string, persistent ...bool) error {
-	return s.getStore(persistent...).Delete(key)
+	return s.GetStore(persistent...).Delete(key)
 }
 
 // List lists all key-value pairs.
 func (s *AppStore) List(persistent ...bool) (map[string]string, error) {
-	return s.getStore(persistent...).List()
+	return s.GetStore(persistent...).List()
 }
 
 // Expire sets an expiration for a key.
 func (s *AppStore) Expire(key string, milliseconds int64, persistent ...bool) error {
-	return s.getStore(persistent...).Expire(key, milliseconds)
+	return s.GetStore(persistent...).Expire(key, milliseconds)
 }
 
 // TTL gets the time-to-live for a key.
 func (s *AppStore) TTL(key string, persistent ...bool) (int64, error) {
-	return s.getStore(persistent...).TTL(key)
+	return s.GetStore(persistent...).TTL(key)
 }
 
 // HSet sets the value of a field in a hash.
 func (s *AppStore) HSet(key, field, value string, persistent ...bool) error {
-	return s.getStore(persistent...).HSet(key, field, value)
+	return s.GetStore(persistent...).HSet(key, field, value)
 }
 
 // HGet gets the value of a field in a hash.
 func (s *AppStore) HGet(key, field string, persistent ...bool) (string, error) {
-	return s.getStore(persistent...).HGet(key, field)
+	return s.GetStore(persistent...).HGet(key, field)
 }
 
 // HGetAll gets all fields and values in a hash.
 func (s *AppStore) HGetAll(key string, persistent ...bool) (map[string]string, error) {
-	return s.getStore(persistent...).HGetAll(key)
+	return s.GetStore(persistent...).HGetAll(key)
 }
 
 // HMGet gets the values of multiple fields in a hash.
@@ -104,7 +104,7 @@ func (s *AppStore) HMGetMem(key string, fields ...string) ([]string, error) {
 
 // HMSet sets the values of multiple fields in a hash.
 func (s *AppStore) HMSet(key string, fieldValue map[string]string, persistent ...bool) error {
-	return s.getStore(persistent...).HMSet(key, fieldValue)
+	return s.GetStore(persistent...).HMSet(key, fieldValue)
 }
 
 // HDel deletes one or more fields from a hash.
@@ -121,17 +121,17 @@ func (s *AppStore) HDelMem(key string, fields ...string) error {
 // HExists checks if a field exists in a hash.
 func (s *AppStore) HExists(key, field string, persistent ...bool) (bool, error) {
 	// 修正返回值类型
-	return s.getStore(persistent...).HExists(key, field)
+	return s.GetStore(persistent...).HExists(key, field)
 }
 
 // HKeys gets all the fields in a hash.
 func (s *AppStore) HKeys(key string, persistent ...bool) ([]string, error) {
-	return s.getStore(persistent...).HKeys(key)
+	return s.GetStore(persistent...).HKeys(key)
 }
 
 // HLen gets the number of fields in a hash.
 func (s *AppStore) HLen(key string, persistent ...bool) (int, error) {
-	return s.getStore(persistent...).HLen(key)
+	return s.GetStore(persistent...).HLen(key)
 }
 
 // LPush prepends one or multiple values to a list.
@@ -156,22 +156,22 @@ func (s *AppStore) RPushMem(key string, values ...string) error {
 
 // LPop removes and returns the first element of a list.
 func (s *AppStore) LPop(key string, persistent ...bool) (string, error) {
-	return s.getStore(persistent...).LPop(key)
+	return s.GetStore(persistent...).LPop(key)
 }
 
 // RPop removes and returns the last element of a list.
 func (s *AppStore) RPop(key string, persistent ...bool) (string, error) {
-	return s.getStore(persistent...).RPop(key)
+	return s.GetStore(persistent...).RPop(key)
 }
 
 // LRange returns a range of elements from a list.
 func (s *AppStore) LRange(key string, start, stop int, persistent ...bool) ([]string, error) {
-	return s.getStore(persistent...).LRange(key, start, stop)
+	return s.GetStore(persistent...).LRange(key, start, stop)
 }
 
 // LLen gets the length of a list.
 func (s *AppStore) LLen(key string, persistent ...bool) (int, error) {
-	return s.getStore(persistent...).LLen(key)
+	return s.GetStore(persistent...).LLen(key)
 }
 
 // SAdd adds one or more members to a set.
@@ -196,17 +196,17 @@ func (s *AppStore) SRemMem(key string, members ...string) error {
 
 // SMembers returns all the members of a set.
 func (s *AppStore) SMembers(key string, persistent ...bool) ([]string, error) {
-	return s.getStore(persistent...).SMembers(key)
+	return s.GetStore(persistent...).SMembers(key)
 }
 
 // SIsMember checks if a member is in a set.
 func (s *AppStore) SIsMember(key, member string, persistent ...bool) (bool, error) {
-	return s.getStore(persistent...).SIsMember(key, member)
+	return s.GetStore(persistent...).SIsMember(key, member)
 }
 
 // SCard gets the number of members in a set.
 func (s *AppStore) SCard(key string, persistent ...bool) (int, error) {
-	return s.getStore(persistent...).SCard(key)
+	return s.GetStore(persistent...).SCard(key)
 }
 
 // Exec executes a query without returning any rows.
