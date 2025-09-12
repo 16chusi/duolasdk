@@ -12,6 +12,7 @@ import (
 
 type AppLog struct {
 	*log.Logger
+	option *LoggerOption
 }
 
 type LoggerOption struct {
@@ -23,7 +24,9 @@ type LoggerOption struct {
 }
 
 func NewLogger(o *LoggerOption) *AppLog {
-	al := &AppLog{}
+	al := &AppLog{
+		option: o,
+	}
 
 	al.Logger = log.New(o.Prefix)
 
@@ -61,6 +64,17 @@ func NewLogger(o *LoggerOption) *AppLog {
 	al.Logger.SetLevel(level)
 
 	return al
+}
+
+func (l *AppLog) WithPrefix(s string) *AppLog {
+
+	return NewLogger(&LoggerOption{
+		Type:     l.option.Type,
+		FileName: l.option.FileName,
+		Level:    l.option.Level,
+		Prefix:   s,
+		Flag:     l.option.Flag,
+	})
 }
 
 type WailsLog struct {
