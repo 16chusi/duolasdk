@@ -1,39 +1,18 @@
 package ai
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/fzxs8/duolasdk/core"
 )
 
-// OllamaClient encapsulates the Ollama API interactions.
-type OllamaClient struct {
-	httpClient *core.HttpCli
-	log        *core.AppLog
-}
-
-// NewOllamaClient creates a new OllamaClient instance with a configurable base URL.
-func NewOllamaClient(log *core.AppLog, baseURL string) *OllamaClient {
-	cli := core.NewHttp(log)
-	cli.Create(&core.Config{
-		BaseURL: baseURL,
-		Headers: map[string]string{
-			"Content-Type": "application/json",
-		},
-	})
-	return &OllamaClient{
-		httpClient: cli,
-		log:        log,
-	}
-}
-
-// --- Common Structures ---
-
-// ChatMessage represents a message in a conversation.
-type ChatMessage struct {
+// Message represents a message in a conversation.
+type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
@@ -67,19 +46,19 @@ type GenerateResponse struct {
 
 // ChatRequest for POST /api/chat
 type ChatRequest struct {
-	Model     string        `json:"model"`
-	Messages  []ChatMessage `json:"messages"`
-	KeepAlive *int          `json:"keep_alive,omitempty"`
-	Stream    bool          `json:"stream,omitempty"` // Add stream option for chat
+	Model     string    `json:"model"`
+	Messages  []Message `json:"messages"` // Now uses ai.Message
+	KeepAlive *int      `json:"keep_alive,omitempty"`
+	Stream    bool      `json:"stream,omitempty"` // Add stream option for chat
 }
 
 // ChatResponse for POST /api/chat (non-streaming)
 type ChatResponse struct {
-	Model      string      `json:"model"`
-	CreatedAt  string      `json:"created_at"`
-	Message    ChatMessage `json:"message"`
-	DoneReason string      `json:"done_reason"`
-	Done       bool        `json:"done"`
+	Model      string  `json:"model"`
+	CreatedAt  string  `json:"created_at"`
+	Message    Message `json:"message"` // Now uses ai.Message
+	DoneReason string  `json:"done_reason"`
+	Done       bool    `json:"done"`
 }
 
 // CreateRequest for POST /api/create
@@ -176,12 +155,152 @@ type SingleEmbedResponse struct {
 	Embedding []float64 `json:"embedding"`
 }
 
-// --- API Functions ---
+// OllamaClient encapsulates the Ollama API interactions.
+type OllamaClient struct {
+	httpClient *core.HttpCli
+	log        *core.AppLog
+}
+
+// NewOllamaClient creates a new OllamaClient instance with a configurable base URL.
+func NewOllamaClient(log *core.AppLog, baseURL string) *OllamaClient {
+	cli := core.NewHttp(log)
+	cli.Create(&core.Config{
+		BaseURL: baseURL,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+	})
+	log.Debug("NewOllamaClient: HttpCli baseURL after creation", "baseURL", baseURL) // Added debug log
+	return &OllamaClient{
+		httpClient: cli,
+		log:        log,
+	}
+}
+
+// OllamaProvider implements core.AIProvider for Ollama.
+type OllamaProvider struct {
+	log          *core.AppLog
+	ollamaClient *OllamaClient
+}
+
+// NewOllamaProvider creates an OllamaProvider instance.
+func NewOllamaProvider(log *core.AppLog, baseURL string) core.AIProvider {
+	return &OllamaProvider{
+		log:          log,
+		ollamaClient: NewOllamaClient(log, baseURL),
+	}
+}
+
+// Chat sends a chat message to Ollama.
+func (o *OllamaProvider) Chat(model string, messages []core.Message) (string, error) {
+	// Convert core.Message to ai.Message
+	ollamaMessages := make([]Message, len(messages))
+	for i, msg := range messages {
+		ollamaMessages[i] = Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+
+	chatReq := ChatRequest{
+		Model:    model,
+		Messages: ollamaMessages,
+		Stream:   false,
+	}
+
+	resp, _, err := o.ollamaClient.Chat(chatReq, false)
+	if err != nil {
+		return "", fmt.Errorf("ollama chat failed: %w", err)
+	}
+
+	return resp.Message.Content, nil
+}
+
+// ChatStream sends a chat message to Ollama and streams the response.
+func (o *OllamaProvider) ChatStream(model string, messages []core.Message, callback func(string)) error {
+	// Convert core.Message to ai.Message
+	ollamaMessages := make([]Message, len(messages))
+	for i, msg := range messages {
+		ollamaMessages[i] = Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+
+	chatReq := ChatRequest{
+		Model:    model,
+		Messages: ollamaMessages,
+		Stream:   true,
+	}
+
+	_, httpResp, err := o.ollamaClient.Chat(chatReq, true)
+	if err != nil {
+		return fmt.Errorf("ollama chat stream failed: %w", err)
+	}
+	defer httpResp.Body.Close()
+
+	reader := bufio.NewReader(httpResp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("reading stream response failed: %w", err)
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var chatResponse ChatResponse // Use ChatResponse for parsing stream chunks
+		err = json.Unmarshal([]byte(line), &chatResponse)
+		if err != nil {
+			// Ignore parsing errors, continue to next line. Ollama sometimes sends non-JSON keep-alive messages.
+			continue
+		}
+
+		if chatResponse.Message.Content != "" {
+			callback(chatResponse.Message.Content)
+		}
+
+		// If Ollama marks stream as done, exit proactively
+		if chatResponse.Done {
+			break
+		}
+	}
+
+	return nil
+}
+
+// ListModels gets the list of models from Ollama.
+func (o *OllamaProvider) ListModels() ([]string, error) {
+	resp, err := o.ollamaClient.ListModels()
+	if err != nil {
+		return nil, fmt.Errorf("ollama list models failed: %w", err)
+	}
+
+	models := make([]string, len(resp.Models))
+	for i, m := range resp.Models {
+		models[i] = m.Name
+	}
+
+	return models, nil
+}
+
+// Validate validates the connection and configuration with Ollama.
+func (o *OllamaProvider) Validate() error {
+	_, err := o.ollamaClient.ListModels()
+	if err != nil {
+		return fmt.Errorf("ollama validation failed: %w", err)
+	}
+	return nil
+}
 
 // GenerateCompletion sends a request to the /api/generate endpoint.
 // It can be used for text generation or to unload a model.
 func (oc *OllamaClient) GenerateCompletion(req GenerateRequest) (*GenerateResponse, error) {
-	oc.log.Debug("Sending generate completion request", "model", req.Model)
 	resp, err := oc.httpClient.Post("/generate", core.Options{Body: req})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send generate request: %w", err)
@@ -202,7 +321,6 @@ func (oc *OllamaClient) GenerateCompletion(req GenerateRequest) (*GenerateRespon
 // If stream is true, it returns a raw http.Response for streaming.
 // If stream is false, it returns a parsed ChatResponse.
 func (oc *OllamaClient) Chat(req ChatRequest, stream bool) (*ChatResponse, *http.Response, error) {
-	oc.log.Debug("Sending chat request", "model", req.Model, "stream", stream)
 
 	if stream {
 		httpResp, err := oc.httpClient.PostStream("/chat", core.Options{Body: req})
@@ -237,7 +355,6 @@ func (oc *OllamaClient) Chat(req ChatRequest, stream bool) (*ChatResponse, *http
 // CreateModel sends a request to the /api/create endpoint.
 // This is a streaming API, so it returns a raw http.Response.
 func (oc *OllamaClient) CreateModel(req CreateRequest) (*http.Response, error) {
-	oc.log.Debug("Sending create model request", "model", req.Model)
 	httpResp, err := oc.httpClient.PostStream("/create", core.Options{Body: req})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send create model request: %w", err)
@@ -253,7 +370,6 @@ func (oc *OllamaClient) CreateModel(req CreateRequest) (*http.Response, error) {
 
 // ListModels sends a request to the /api/tags endpoint.
 func (oc *OllamaClient) ListModels() (*ListModelsResponse, error) {
-	oc.log.Debug("Sending list models request")
 	resp, err := oc.httpClient.Get("/tags", core.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send list models request: %w", err)
@@ -272,7 +388,6 @@ func (oc *OllamaClient) ListModels() (*ListModelsResponse, error) {
 
 // ShowModelDetails sends a request to the /api/show endpoint.
 func (oc *OllamaClient) ShowModelDetails(req ShowRequest) (*ShowResponse, error) {
-	oc.log.Debug("Sending show model details request", "model", req.Model)
 	resp, err := oc.httpClient.Post("/show", core.Options{Body: req})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send show model details request: %w", err)
@@ -291,7 +406,6 @@ func (oc *OllamaClient) ShowModelDetails(req ShowRequest) (*ShowResponse, error)
 
 // CopyModel sends a request to the /api/copy endpoint.
 func (oc *OllamaClient) CopyModel(req CopyRequest) error {
-	oc.log.Debug("Sending copy model request", "source", req.Source, "destination", req.Destination)
 	resp, err := oc.httpClient.Post("/copy", core.Options{Body: req})
 	if err != nil {
 		return fmt.Errorf("failed to send copy model request: %w", err)
@@ -305,7 +419,6 @@ func (oc *OllamaClient) CopyModel(req CopyRequest) error {
 
 // DeleteModel sends a request to the /api/delete endpoint.
 func (oc *OllamaClient) DeleteModel(req DeleteRequest) error {
-	oc.log.Debug("Sending delete model request", "model", req.Model)
 	resp, err := oc.httpClient.Delete("/delete", core.Options{Body: req})
 	if err != nil {
 		return fmt.Errorf("failed to send delete model request: %w", err)
@@ -320,7 +433,6 @@ func (oc *OllamaClient) DeleteModel(req DeleteRequest) error {
 // PullModel sends a request to the /api/pull endpoint.
 // This is a streaming API, so it returns a raw http.Response.
 func (oc *OllamaClient) PullModel(req PullRequest) (*http.Response, error) {
-	oc.log.Debug("Sending pull model request", "model", req.Model)
 	httpResp, err := oc.httpClient.PostStream("/pull", core.Options{Body: req})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send pull model request: %w", err)
@@ -336,7 +448,6 @@ func (oc *OllamaClient) PullModel(req PullRequest) (*http.Response, error) {
 
 // GenerateEmbeddings sends a request to the /api/embed endpoint for multiple inputs.
 func (oc *OllamaClient) GenerateEmbeddings(req EmbedRequest) (*EmbedResponse, error) {
-	oc.log.Debug("Sending generate embeddings request", "model", req.Model, "input_count", len(req.Input))
 	resp, err := oc.httpClient.Post("/embed", core.Options{Body: req})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send generate embeddings request: %w", err)
@@ -355,7 +466,6 @@ func (oc *OllamaClient) GenerateEmbeddings(req EmbedRequest) (*EmbedResponse, er
 
 // ListRunningModels sends a request to the /api/ps endpoint.
 func (oc *OllamaClient) ListRunningModels() (*ListRunningModelsResponse, error) {
-	oc.log.Debug("Sending list running models request")
 	resp, err := oc.httpClient.Post("/ps", core.Options{}) // /ps is POST, but no body needed
 	if err != nil {
 		return nil, fmt.Errorf("failed to send list running models request: %w", err)
@@ -374,7 +484,6 @@ func (oc *OllamaClient) ListRunningModels() (*ListRunningModelsResponse, error) 
 
 // GenerateSingleEmbedding sends a request to the /api/embeddings endpoint for a single input.
 func (oc *OllamaClient) GenerateSingleEmbedding(req SingleEmbedRequest) (*SingleEmbedResponse, error) {
-	oc.log.Debug("Sending generate single embedding request", "model", req.Model)
 	resp, err := oc.httpClient.Post("/embeddings", core.Options{Body: req})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send generate single embedding request: %w", err)

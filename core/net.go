@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"strings"
 )
 
 // RequestInterceptor 请求拦截器函数类型
@@ -69,7 +70,10 @@ func (c *HttpCli) Create(cfg *Config) *HttpCli {
 	}
 
 	if cfg.BaseURL != "" {
-		c.baseURL = cfg.BaseURL
+		// Ensure baseURL always ends with a slash for correct relative path resolution
+		// This is crucial for url.JoinPath to work as expected when path starts with a slash.
+		c.baseURL = strings.TrimSuffix(cfg.BaseURL, "/") + "/"
+		c.log.Debug("HttpCli.Create: BaseURL after normalization", "normalizedURL", c.baseURL) // Added debug log
 	}
 	if cfg.Headers != nil {
 		for k, v := range cfg.Headers {
@@ -114,25 +118,29 @@ func (c *HttpCli) Delete(url string, options Options) (*Response, error) {
 }
 
 func (c *HttpCli) Do(method, path string, opt Options) (*Response, error) {
-	fullURL, err := url.Parse(c.baseURL)
+	c.log.Debug("HttpCli.Do: Before JoinPath", "baseURL", c.baseURL, "path", path) // Added debug log
+	// Use url.JoinPath for robust URL construction
+	fullURL, err := url.JoinPath(c.baseURL, path)
+	if err != nil {
+		return nil, fmt.Errorf("无法拼接URL: %w", err)
+	}
+
+	parsedURL, err := url.Parse(fullURL)
 	if err != nil {
 		return nil, fmt.Errorf("错误的URL地址: %w", err)
 	}
-	fullURL, err = fullURL.Parse(path)
-	if err != nil {
-		return nil, fmt.Errorf("错误的请求地址: %w", err)
-	}
 
 	if opt.Query != nil {
-		q := fullURL.Query()
+		q := parsedURL.Query()
 		for k, v := range opt.Query {
 			q.Set(k, fmt.Sprintf("%v", v))
 		}
-		fullURL.RawQuery = q.Encode()
+		parsedURL.RawQuery = q.Encode()
 	}
 
 	var bodyReader io.Reader
 	var contentType string
+	var requestBodyBytes []byte // To store body for logging
 
 	if opt.Body != nil {
 		headerContentType, isJSON := opt.Headers["Content-Type"]
@@ -143,6 +151,7 @@ func (c *HttpCli) Do(method, path string, opt Options) (*Response, error) {
 				return nil, fmt.Errorf("错误的json格式: %w", err)
 			}
 			bodyReader = bytes.NewBuffer(jsonData)
+			requestBodyBytes = jsonData // Store for logging
 		} else {
 			contentType = "application/x-www-form-urlencoded"
 			var bodyMap map[string]interface{}
@@ -154,13 +163,17 @@ func (c *HttpCli) Do(method, path string, opt Options) (*Response, error) {
 			}
 			encodedData := formData.Encode()
 			bodyReader = bytes.NewBufferString(encodedData)
+			requestBodyBytes = []byte(encodedData) // Store for logging
 		}
 	}
 
-	req, err := http.NewRequest(method, fullURL.String(), bodyReader)
+	req, err := http.NewRequest(method, parsedURL.String(), bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("无法创建请求: %w", err)
 	}
+
+	// Log the full request details
+	c.log.Debug("HTTP Request", "Method", method, "URL", req.URL.String(), "Headers", req.Header, "Body", string(requestBodyBytes))
 
 	for k, v := range c.headers {
 		req.Header[k] = v
@@ -208,28 +221,32 @@ func (c *HttpCli) Do(method, path string, opt Options) (*Response, error) {
 
 // PostStream 发送 POST 请求并返回原始的 http.Response 用于流式处理
 func (c *HttpCli) PostStream(path string, options Options) (*http.Response, error) {
-	fullURL, err := url.Parse(c.baseURL)
+	c.log.Debug("HttpCli.PostStream: Before JoinPath", "baseURL", c.baseURL, "path", path) // Added debug log
+	// Use url.JoinPath for robust URL construction
+	fullURL, err := url.JoinPath(c.baseURL, path)
 	if err != nil {
-		return nil, fmt.Errorf("错误的URL地址: %w", err)
-	}
-	fullURL, err = fullURL.Parse(path)
-	if err != nil {
-		return nil, fmt.Errorf("错误的请求地址: %w", err)
+		return nil, fmt.Errorf("无法拼接URL: %w", err)
 	}
 
 	var bodyReader io.Reader
+	var requestBodyBytes []byte // To store body for logging
+
 	if options.Body != nil {
 		jsonData, err := json.Marshal(options.Body)
 		if err != nil {
 			return nil, fmt.Errorf("错误的json格式: %w", err)
 		}
 		bodyReader = bytes.NewBuffer(jsonData)
+		requestBodyBytes = jsonData // Store for logging
 	}
 
-	req, err := http.NewRequest(http.MethodPost, fullURL.String(), bodyReader)
+	req, err := http.NewRequest(http.MethodPost, fullURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("无法创建请求: %w", err)
 	}
+
+	// Log the full request details
+	c.log.Debug("HTTP Stream Request", "Method", http.MethodPost, "URL", req.URL.String(), "Headers", req.Header, "Body", string(requestBodyBytes))
 
 	for k, v := range c.headers {
 		req.Header[k] = v
