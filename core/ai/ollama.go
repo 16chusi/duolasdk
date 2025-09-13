@@ -177,6 +177,11 @@ func NewOllamaClient(log *core.AppLog, baseURL string) *OllamaClient {
 	}
 }
 
+// HttpClient returns the underlying core.HttpCli instance.
+func (oc *OllamaClient) HttpClient() *core.HttpCli {
+	return oc.httpClient
+}
+
 // OllamaProvider implements core.AIProvider for Ollama.
 type OllamaProvider struct {
 	log          *core.AppLog

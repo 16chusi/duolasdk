@@ -117,6 +117,18 @@ func (c *HttpCli) Delete(url string, options Options) (*Response, error) {
 	return c.Do(http.MethodDelete, url, options)
 }
 
+func (c *HttpCli) Patch(url string, options Options) (*Response, error) {
+	return c.Do(http.MethodPatch, url, options)
+}
+
+func (c *HttpCli) Head(url string, options Options) (*Response, error) {
+	return c.Do(http.MethodHead, url, options)
+}
+
+func (c *HttpCli) Options(url string, options Options) (*Response, error) {
+	return c.Do(http.MethodOptions, url, options)
+}
+
 func (c *HttpCli) Do(method, path string, opt Options) (*Response, error) {
 	c.log.Debug("HttpCli.Do: Before JoinPath", "baseURL", c.baseURL, "path", path) // Added debug log
 	// Use url.JoinPath for robust URL construction
