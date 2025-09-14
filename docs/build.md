@@ -8,7 +8,7 @@ GOPROXY=https://proxy.golang.org go list -m github.com/fzxs8/duolasdk@v1.0.6
 ```
 
 ```shell
-version="v1.0.6"
+version="v1.0.7"
 
 git tag -l $version
 git tag -a $version -m "Release $version of duolasdk"
