@@ -129,6 +129,19 @@ func (a *OpenAIAdapter) emitLog(level string, message string) {
 // ServeHTTP is the main entry point for handling requests to /v1/chat/completions.
 func (a *OpenAIAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.emitLog("INFO", fmt.Sprintf("Received request: %s %s", r.Method, r.URL.Path))
+
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	// Handle preflight OPTIONS request
+	if r.Method == http.MethodOptions {
+		a.emitLog("DEBUG", "Handling CORS preflight request")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		errMsg := fmt.Sprintf("Method %s not allowed, please use POST", r.Method)
 		a.emitLog("ERROR", errMsg)
