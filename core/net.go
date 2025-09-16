@@ -132,11 +132,16 @@ func (c *HttpCli) Options(url string, options Options) (*Response, error) {
 func (c *HttpCli) Do(method, path string, opt Options) (*Response, error) {
 	c.log.Debug("HttpCli.Do: Before JoinPath", "baseURL", c.baseURL, "path", path) // Added debug log
 	// Use url.JoinPath for robust URL construction
-	fullURL, err := url.JoinPath(c.baseURL, path)
-	if err != nil {
-		return nil, fmt.Errorf("无法拼接URL: %w", err)
+	fullURL := ""
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		fullURL = path
+	} else {
+		p, err := url.JoinPath(c.baseURL, path)
+		if err != nil {
+			return nil, fmt.Errorf("无法拼接URL: %w", err)
+		}
+		fullURL = p
 	}
-
 	parsedURL, err := url.Parse(fullURL)
 	if err != nil {
 		return nil, fmt.Errorf("错误的URL地址: %w", err)
