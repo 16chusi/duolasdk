@@ -177,7 +177,7 @@ func NewLocalStore(opts ...StoreOption) (*LocalStore, error) {
 	}
 
 	// 构建数据库文件路径
-	dbPath := filepath.Join(dir, option.FileName)
+	dbPath := filepath.Join(dir, "data", fmt.Sprintf("%s.dat", option.FileName))
 
 	// 记录日志
 	if option.Logger != nil {
