@@ -76,6 +76,14 @@ Duola SDK 是一个多模块的工具包，为 Duola 桌面应用程序提供核
 - `Query(query string, args ...interface{}) (*sql.Rows, error)` - 执行查询
 - `QueryRow(query string, args ...interface{}) *sql.Row` - 执行单行查询
 
+#### 表管理操作
+- `CreateTable(tableName, schema string) error` - 创建表
+- `TableExists(tableName string) (bool, error)` - 检查表是否存在
+- `DropTable(tableName string) error` - 删除表
+- `AddColumn(tableName, columnDef string) error` - 添加列
+- `GetTableSchema(tableName string) ([]ColumnInfo, error)` - 获取表结构信息
+- `BeginTx() (ITransaction, error)` - 开始事务
+
 ### 实现细节
 
 #### baseStore 基类
@@ -138,6 +146,8 @@ Duola SDK 是一个多模块的工具包，为 Duola 桌面应用程序提供核
 
 ### 使用示例
 
+#### 基础存储操作
+
 ```go
 // 创建存储实例
 logs := core.NewLogger(&core.LoggerOption{
@@ -165,6 +175,69 @@ length, _ := store.LLen("mylist")
 // 使用 Set 存储
 store.SAdd("myset", "member1", "member2")
 members, _ := store.SMembers("myset")
+```
+
+#### 表管理操作
+
+```go
+// 创建表
+err := store.CreateTable("certificates", `
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+`)
+
+// 检查表是否存在
+exists, err := store.TableExists("certificates")
+if !exists {
+    // 表不存在，创建表
+    err = store.CreateTable("certificates", "...")
+}
+
+// 添加新列（用于数据库升级）
+err = store.AddColumn("certificates", "updated_at DATETIME")
+
+// 获取表结构信息
+columns, err := store.GetTableSchema("certificates")
+for _, col := range columns {
+    fmt.Printf("Column: %s, Type: %s, NotNull: %t\n", 
+        col.Name, col.Type, col.NotNull)
+}
+
+// 删除表
+err = store.DropTable("old_table")
+```
+
+#### 事务操作
+
+```go
+// 开始事务
+tx, err := store.BeginTx()
+if err != nil {
+    log.Fatal(err)
+}
+
+// 在事务中执行多个操作
+_, err = tx.Exec("INSERT INTO certificates (name, status) VALUES (?, ?)", 
+    "example.com", "active")
+if err != nil {
+    tx.Rollback()
+    return err
+}
+
+_, err = tx.Exec("UPDATE certificates SET updated_at = ? WHERE name = ?", 
+    time.Now(), "example.com")
+if err != nil {
+    tx.Rollback()
+    return err
+}
+
+// 提交事务
+err = tx.Commit()
+if err != nil {
+    return err
+}
 ```
 
 ## 网络模块
@@ -262,6 +335,94 @@ appStore.Set("key", "value")  // 不传第三个参数，默认使用持久化�
 value, _ := appStore.Get("key")
 ```
 
+### 数据类型定义
+
+#### ColumnInfo 结构体
+
+表示数据库表列的信息：
+
+```go
+type ColumnInfo struct {
+    Name         string `json:"name"`         // 列名
+    Type         string `json:"type"`         // 数据类型
+    NotNull      bool   `json:"notNull"`      // 是否非空
+    DefaultValue string `json:"defaultValue"` // 默认值
+    PrimaryKey   bool   `json:"primaryKey"`   // 是否主键
+}
+```
+
+#### ITransaction 接口
+
+事务操作接口：
+
+```go
+type ITransaction interface {
+    Exec(query string, args ...interface{}) (sql.Result, error)
+    Query(query string, args ...interface{}) (*sql.Rows, error)
+    QueryRow(query string, args ...interface{}) *sql.Row
+    Commit() error
+    Rollback() error
+}
+```
+
+### 数据库升级与兼容性
+
+#### 向下兼容性保证
+
+1. **接口扩展** - 只在 IStore 接口中添加新方法，不修改现有方法
+2. **现有功能不变** - 所有原有的 Redis 风格操作和 SQL 操作保持不变
+3. **可选使用** - 新功能是可选的，现有代码无需修改即可继续工作
+4. **安全操作** - 使用 `IF NOT EXISTS` 和 `IF EXISTS` 确保操作安全
+
+#### 数据库升级示例
+
+```go
+// 检查并升级数据库结构
+func upgradeDatabase(store core.IStore) error {
+    // 检查新表是否存在
+    exists, err := store.TableExists("new_feature_table")
+    if err != nil {
+        return err
+    }
+    
+    if !exists {
+        // 创建新表
+        err = store.CreateTable("new_feature_table", `
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            feature_name TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        `)
+        if err != nil {
+            return err
+        }
+    }
+    
+    // 检查现有表是否需要添加新列
+    columns, err := store.GetTableSchema("certificates")
+    if err != nil {
+        return err
+    }
+    
+    hasUpdatedAt := false
+    for _, col := range columns {
+        if col.Name == "updated_at" {
+            hasUpdatedAt = true
+            break
+        }
+    }
+    
+    if !hasUpdatedAt {
+        // 添加新列
+        err = store.AddColumn("certificates", "updated_at DATETIME")
+        if err != nil {
+            return err
+        }
+    }
+    
+    return nil
+}
+```
+
 ## 最佳实践
 
 ### 存储模块使用建议
@@ -269,6 +430,8 @@ value, _ := appStore.Get("key")
 2. 对于临时或会话数据，使用 MemStore
 3. 合理使用过期功能管理数据生命周期
 4. 注意在应用退出时调用 Close 方法释放资源
+5. 使用表管理功能进行数据库结构升级
+6. 在复杂操作中使用事务确保数据一致性
 
 ### 网络模块使用建议
 1. 合理使用拦截器处理通用逻辑（如认证、日志等）
@@ -279,3 +442,10 @@ value, _ := appStore.Get("key")
 1. 合理设置日志级别，避免生产环境输出过多调试日志
 2. 在关键路径添加日志记录，便于问题排查
 3. 注意日志文件大小管理，避免占用过多磁盘空间
+
+### 数据库设计建议
+1. 使用 `INTEGER PRIMARY KEY AUTOINCREMENT` 作为主键
+2. 重要字段添加 `NOT NULL` 约束
+3. 使用 `DATETIME DEFAULT CURRENT_TIMESTAMP` 记录创建时间
+4. 合理使用索引提高查询性能
+5. 在升级时使用 `AddColumn` 而不是重建表

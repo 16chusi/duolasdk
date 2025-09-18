@@ -77,8 +77,80 @@ type IStore interface {
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 
+	// Enhanced SQL operations for table management
+	CreateTable(tableName string, schema string) error
+	TableExists(tableName string) (bool, error)
+	DropTable(tableName string) error
+	AddColumn(tableName, columnDef string) error
+	GetTableSchema(tableName string) ([]ColumnInfo, error)
+	BeginTx() (ITransaction, error)
+
 	// Close 关闭存储连接
 	Close() error
+}
+
+// ColumnInfo 表示列信息
+type ColumnInfo struct {
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	NotNull      bool   `json:"notNull"`
+	DefaultValue string `json:"defaultValue"`
+	PrimaryKey   bool   `json:"primaryKey"`
+}
+
+// ITransaction 事务接口
+type ITransaction interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Commit() error
+	Rollback() error
+}
+
+// Transaction 事务实现
+type Transaction struct {
+	tx     *sql.Tx
+	logger *AppLog
+}
+
+// Exec 在事务中执行SQL
+func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error) {
+	if t.logger != nil {
+		t.logger.Debugf("Transaction.Exec: %s, args: %v", query, args)
+	}
+	return t.tx.Exec(query, args...)
+}
+
+// Query 在事务中执行查询
+func (t *Transaction) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	if t.logger != nil {
+		t.logger.Debugf("Transaction.Query: %s, args: %v", query, args)
+	}
+	return t.tx.Query(query, args...)
+}
+
+// QueryRow 在事务中执行单行查询
+func (t *Transaction) QueryRow(query string, args ...interface{}) *sql.Row {
+	if t.logger != nil {
+		t.logger.Debugf("Transaction.QueryRow: %s, args: %v", query, args)
+	}
+	return t.tx.QueryRow(query, args...)
+}
+
+// Commit 提交事务
+func (t *Transaction) Commit() error {
+	if t.logger != nil {
+		t.logger.Debug("Transaction.Commit")
+	}
+	return t.tx.Commit()
+}
+
+// Rollback 回滚事务
+func (t *Transaction) Rollback() error {
+	if t.logger != nil {
+		t.logger.Debug("Transaction.Rollback")
+	}
+	return t.tx.Rollback()
 }
 
 // baseStore 基础存储实现
@@ -1516,6 +1588,173 @@ func (b *baseStore) QueryRow(query string, args ...interface{}) *sql.Row {
 	return row
 }
 
+// CreateTable 创建表
+func (b *baseStore) CreateTable(tableName string, schema string) error {
+	if b.logger != nil {
+		b.logger.Debugf("Store.CreateTable: creating table %s", tableName)
+	}
+
+	query := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", tableName, schema)
+	_, err := b.db.Exec(query)
+
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Errorf("Store.CreateTable: failed to create table %s: %v", tableName, err)
+		}
+		return err
+	}
+
+	if b.logger != nil {
+		b.logger.Debugf("Store.CreateTable: successfully created table %s", tableName)
+	}
+
+	return nil
+}
+
+// TableExists 检查表是否存在
+func (b *baseStore) TableExists(tableName string) (bool, error) {
+	if b.logger != nil {
+		b.logger.Debugf("Store.TableExists: checking table %s", tableName)
+	}
+
+	var count int
+	err := b.db.QueryRow(`
+		SELECT COUNT(*) FROM sqlite_master 
+		WHERE type='table' AND name=?
+	`, tableName).Scan(&count)
+
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Errorf("Store.TableExists: failed to check table %s: %v", tableName, err)
+		}
+		return false, err
+	}
+
+	exists := count > 0
+	if b.logger != nil {
+		b.logger.Debugf("Store.TableExists: table %s exists: %t", tableName, exists)
+	}
+
+	return exists, nil
+}
+
+// DropTable 删除表
+func (b *baseStore) DropTable(tableName string) error {
+	if b.logger != nil {
+		b.logger.Debugf("Store.DropTable: dropping table %s", tableName)
+	}
+
+	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)
+	_, err := b.db.Exec(query)
+
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Errorf("Store.DropTable: failed to drop table %s: %v", tableName, err)
+		}
+		return err
+	}
+
+	if b.logger != nil {
+		b.logger.Debugf("Store.DropTable: successfully dropped table %s", tableName)
+	}
+
+	return nil
+}
+
+// AddColumn 添加列（SQLite限制：只能添加列，不能删除或修改）
+func (b *baseStore) AddColumn(tableName, columnDef string) error {
+	if b.logger != nil {
+		b.logger.Debugf("Store.AddColumn: adding column to table %s: %s", tableName, columnDef)
+	}
+
+	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", tableName, columnDef)
+	_, err := b.db.Exec(query)
+
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Errorf("Store.AddColumn: failed to add column to table %s: %v", tableName, err)
+		}
+		return err
+	}
+
+	if b.logger != nil {
+		b.logger.Debugf("Store.AddColumn: successfully added column to table %s", tableName)
+	}
+
+	return nil
+}
+
+// GetTableSchema 获取表结构信息
+func (b *baseStore) GetTableSchema(tableName string) ([]ColumnInfo, error) {
+	if b.logger != nil {
+		b.logger.Debugf("Store.GetTableSchema: getting schema for table %s", tableName)
+	}
+
+	rows, err := b.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Errorf("Store.GetTableSchema: failed to get schema for table %s: %v", tableName, err)
+		}
+		return nil, err
+	}
+	defer rows.Close()
+
+	var columns []ColumnInfo
+	for rows.Next() {
+		var cid int
+		var name, dataType, defaultValue string
+		var notNull, pk int
+		var dfltValue sql.NullString
+
+		err := rows.Scan(&cid, &name, &dataType, &notNull, &dfltValue, &pk)
+		if err != nil {
+			if b.logger != nil {
+				b.logger.Errorf("Store.GetTableSchema: failed to scan column info: %v", err)
+			}
+			return nil, err
+		}
+
+		if dfltValue.Valid {
+			defaultValue = dfltValue.String
+		}
+
+		columns = append(columns, ColumnInfo{
+			Name:         name,
+			Type:         dataType,
+			NotNull:      notNull == 1,
+			DefaultValue: defaultValue,
+			PrimaryKey:   pk == 1,
+		})
+	}
+
+	if b.logger != nil {
+		b.logger.Debugf("Store.GetTableSchema: found %d columns for table %s", len(columns), tableName)
+	}
+
+	return columns, nil
+}
+
+// BeginTx 开始事务
+func (b *baseStore) BeginTx() (ITransaction, error) {
+	if b.logger != nil {
+		b.logger.Debug("Store.BeginTx: starting transaction")
+	}
+
+	tx, err := b.db.Begin()
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Errorf("Store.BeginTx: failed to begin transaction: %v", err)
+		}
+		return nil, err
+	}
+
+	if b.logger != nil {
+		b.logger.Debug("Store.BeginTx: transaction started successfully")
+	}
+
+	return &Transaction{tx: tx, logger: b.logger}, nil
+}
+
 // Close 关闭存储连接
 func (b *baseStore) Close() error {
 	if b.logger != nil {
@@ -1686,6 +1925,36 @@ func (l *LocalStore) Query(query string, args ...interface{}) (*sql.Rows, error)
 // QueryRow 在本地存储上执行单行查询
 func (l *LocalStore) QueryRow(query string, args ...interface{}) *sql.Row {
 	return l.baseStore.QueryRow(query, args...)
+}
+
+// CreateTable 创建表
+func (l *LocalStore) CreateTable(tableName string, schema string) error {
+	return l.baseStore.CreateTable(tableName, schema)
+}
+
+// TableExists 检查表是否存在
+func (l *LocalStore) TableExists(tableName string) (bool, error) {
+	return l.baseStore.TableExists(tableName)
+}
+
+// DropTable 删除表
+func (l *LocalStore) DropTable(tableName string) error {
+	return l.baseStore.DropTable(tableName)
+}
+
+// AddColumn 添加列
+func (l *LocalStore) AddColumn(tableName, columnDef string) error {
+	return l.baseStore.AddColumn(tableName, columnDef)
+}
+
+// GetTableSchema 获取表结构信息
+func (l *LocalStore) GetTableSchema(tableName string) ([]ColumnInfo, error) {
+	return l.baseStore.GetTableSchema(tableName)
+}
+
+// BeginTx 开始事务
+func (l *LocalStore) BeginTx() (ITransaction, error) {
+	return l.baseStore.BeginTx()
 }
 
 // Set 在内存存储中设置键值对
@@ -1896,4 +2165,46 @@ func (m *MemStore) TTL(key string) (int64, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	return m.baseStore.TTL(key)
+}
+
+// CreateTable 创建表
+func (m *MemStore) CreateTable(tableName string, schema string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.baseStore.CreateTable(tableName, schema)
+}
+
+// TableExists 检查表是否存在
+func (m *MemStore) TableExists(tableName string) (bool, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return m.baseStore.TableExists(tableName)
+}
+
+// DropTable 删除表
+func (m *MemStore) DropTable(tableName string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.baseStore.DropTable(tableName)
+}
+
+// AddColumn 添加列
+func (m *MemStore) AddColumn(tableName, columnDef string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.baseStore.AddColumn(tableName, columnDef)
+}
+
+// GetTableSchema 获取表结构信息
+func (m *MemStore) GetTableSchema(tableName string) ([]ColumnInfo, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return m.baseStore.GetTableSchema(tableName)
+}
+
+// BeginTx 开始事务
+func (m *MemStore) BeginTx() (ITransaction, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.baseStore.BeginTx()
 }
