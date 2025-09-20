@@ -20,7 +20,6 @@ type LoggerOption struct {
 	FileName string // 日志文件路径 if type is "file"
 	Level    string
 	Prefix   string
-	Flag     int
 }
 
 func NewLogger(o *LoggerOption) *AppLog {
@@ -73,7 +72,6 @@ func (l *AppLog) WithPrefix(s string) *AppLog {
 		FileName: l.option.FileName,
 		Level:    l.option.Level,
 		Prefix:   s,
-		Flag:     l.option.Flag,
 	})
 }
 

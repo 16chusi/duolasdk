@@ -55,6 +55,16 @@ func NewHttp(log *AppLog) *HttpCli {
 	statefulClient := &http.Client{
 		Jar: jar,
 	}
+
+	if log == nil {
+		log = NewLogger(&LoggerOption{
+			FileName: "log.log",
+			Level:    "debug",
+			Prefix:   "duola-sdk",
+			Type:     "file",
+		})
+	}
+
 	return &HttpCli{
 		log:        log,
 		httpClient: statefulClient,
