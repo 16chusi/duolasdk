@@ -71,8 +71,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/fzxs8/duolasdk/core"
-	"github.com/fzxs8/duolasdk/core/ai"
+	"github.com/16chusi/duolasdk/core"
+	"github.com/16chusi/duolasdk/core/ai"
 )
 
 func main() {
@@ -134,8 +134,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/fzxs8/duolasdk/core"
-	"github.com/fzxs8/duolasdk/core/ai"
+	"github.com/16chusi/duolasdk/core"
+	"github.com/16chusi/duolasdk/core/ai"
 )
 
 func main() {

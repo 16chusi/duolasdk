@@ -33,7 +33,7 @@ Duola SDK 是一个功能丰富的桌面应用程序开发工具包，为 Duola 
 ## 安装
 
 ```bash
-go get github.com/fzxs8/duolasdk
+go get github.com/16chusi/duolasdk
 ```
 
 ## 快速开始
@@ -42,8 +42,8 @@ go get github.com/fzxs8/duolasdk
 
 ```go
 import (
-    "github.com/fzxs8/duolasdk"
-    "github.com/fzxs8/duolasdk/core"
+    "github.com/16chusi/duolasdk"
+    "github.com/16chusi/duolasdk/core"
 )
 
 // 创建日志实例

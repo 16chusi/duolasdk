@@ -53,7 +53,7 @@
 ```go
 package main
 
-import "github.com/fzxs8/duolasdk/core"
+import "github.com/16chusi/duolasdk/core"
 
 func main() {
 	// --- 示例 1: 输出到控制台 ---

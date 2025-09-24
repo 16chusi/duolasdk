@@ -92,7 +92,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/fzxs8/duolasdk/core"
+	"github.com/16chusi/duolasdk/core"
 )
 
 func main() {
@@ -187,7 +187,8 @@ func downloadFileExample() {
 	progressCallback := func(current, total int64) {
 		if total > 0 {
 			progress := float64(current) * 100 / float64(total)
-			fmt.Printf("下载进度: %.2f%% (%d/%d bytes)", progress, current, total)
+			fmt.Printf("下载进度: %.2f%% (%d/%d bytes)
+", progress, current, total)
 		}
 	}
 

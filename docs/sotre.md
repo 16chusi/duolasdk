@@ -133,7 +133,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/fzxs8/duolasdk/core"
+	"github.com/16chusi/duolasdk/core"
 )
 
 func main() {

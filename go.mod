@@ -1,11 +1,11 @@
-module github.com/fzxs8/duolasdk
+module github.com/16chusi/duolasdk
 
 go 1.24.4
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/labstack/gommon v0.4.2
-	modernc.org/sqlite v1.38.2
+	modernc.org/sqlite v1.39.0 
 )
 
 require (

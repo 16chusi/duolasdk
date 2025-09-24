@@ -3,7 +3,7 @@ package duolasdk
 import (
 	"database/sql"
 
-	"github.com/fzxs8/duolasdk/core"
+	"github.com/16chusi/duolasdk/core"
 )
 
 // AppStore 实现 IStore 接口，支持持久化和内存存储
@@ -250,4 +250,26 @@ func (s *AppStore) Close() error {
 		return localErr
 	}
 	return memErr
+}
+
+func (s *AppStore) CreateTable(tableName string, schema string) error {
+	return s.local.CreateTable(tableName, schema)
+}
+
+func (s *AppStore) CreateTableMem(tableName string, schema string) error {
+	return s.mem.CreateTable(tableName, schema)
+}
+
+func (s *AppStore) DropTable(tableName string) error {
+	return s.local.DropTable(tableName)
+}
+func (s *AppStore) DropTableMem(tableName string) error {
+	return s.mem.DropTable(tableName)
+}
+
+func (s *AppStore) TableExists(tableName string) (bool, error) {
+	return s.local.TableExists(tableName)
+}
+func (s *AppStore) TableExistsMem(tableName string) (bool, error) {
+	return s.mem.TableExists(tableName)
 }
